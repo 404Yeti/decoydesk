@@ -3,7 +3,7 @@
 DecoyDesk is a lightweight, interactive cyber threat visualization dashboard that showcases global attack trends in real time. Whether you're a security analyst, educator, or enthusiast, DecoyDesk lets you simulate attacks and monitor activity on a stunning world map — all from your browser.
 
 <p align="center">
-  <img src="assets/decoyduck.png" alt="DecoyDesk Logo" width="200"/>
+  <img src="asset/decoyduck.png" alt="DecoyDesk Logo" width="200"/>
 </p>
 
 ## 🌐 Live Dashboard Preview
