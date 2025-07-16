@@ -1,0 +1,73 @@
+# Go
+bin/
+obj/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go module files
+vendor/
+
+# Logs
+*.log
+
+# Dependency directories (Go Modules)
+pkg/mod/
+go.sum
+
+# Docker
+*.tar
+*.img
+docker-compose.override.yml
+
+# Build artifacts
+dist/
+build/
+
+# Node/npm/yarn (just in case you add frontend tooling later)
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Editor/OS files
+.DS_Store
+*.swp
+*.swo
+*.swn
+*.bak
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# GitHub Codespaces
+.devcontainer/
+
+# Web assets (if generated)
+*.map
+
+# Secrets (DO NOT COMMIT)
+.env
+.env.local
+.env.*.local
+
+
+# Database files and dumps
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.mdb
+*.bak
+*.dump
+*.tar.gz
+*.gz
+
+# If you use a custom data/ directory
+data/

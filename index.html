@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🌐 DecoyDesk - Cyber Threat Command Center</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #0d0d0d;
+      color: #00ffe1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    #map {
+      flex: 1;
+      width: 100%;
+      z-index: 0;
+    }
+
+    #dashboard {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-around;
+      background: rgba(10, 10, 10, 0.95);
+      padding: 10px 20px;
+      box-shadow: 0 -2px 10px rgba(0, 255, 213, 0.2);
+      z-index: 1000;
+    }
+
+    .panel {
+      flex: 1 1 30%;
+      margin: 10px;
+      background: #1a1a1a;
+      border-radius: 10px;
+      padding: 15px;
+      color: #d0f0ff;
+      min-width: 250px;
+      box-shadow: 0 0 8px rgba(0, 255, 213, 0.2);
+    }
+
+    .panel h3 {
+      border-bottom: 1px solid #00ffe1;
+      padding-bottom: 5px;
+      margin-bottom: 10px;
+      font-size: 1.1rem;
+      color: #00ffe1;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    li {
+      margin: 4px 0;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="dashboard">
+    <div class="panel">
+      <h3>🌍 Top Countries</h3>
+      <ul id="top-countries"></ul>
+    </div>
+    <div class="panel">
+      <h3>🔥 Top Attacks</h3>
+      <ul id="top-attacks"></ul>
+    </div>
+    <div class="panel">
+      <h3>📡 Recent Events</h3>
+      <ul id="recent-events"></ul>
+    </div>
+  </div>
+
+  <script>
+    const map = L.map('map').setView([20, 0], 2);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      subdomains: 'abcd',
+      maxZoom: 19
+    }).addTo(map);
+
+    async function updateDashboard() {
+      try {
+        const res = await fetch('http://localhost:8091/api/traps');
+        const data = await res.json();
+        const valid = data.filter(e => e.latitude !== 0 && e.longitude !== 0);
+
+        const countryStats = {};
+        const attackStats = {};
+
+        valid.forEach(e => {
+          L.circleMarker([e.latitude, e.longitude], {
+            radius: 5,
+            color: '#ff0055',
+            fillOpacity: 0.7
+          }).addTo(map).bindPopup(
+            `<strong>${e.event}</strong><br>${e.country || 'Unknown'}<br>${e.ip}`
+          );
+
+          if (e.country) countryStats[e.country] = (countryStats[e.country] || 0) + 1;
+          attackStats[e.event] = (attackStats[e.event] || 0) + 1;
+        });
+
+        // Top countries
+        const countryList = document.getElementById('top-countries');
+        countryList.innerHTML = '';
+        Object.entries(countryStats)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .forEach(([country, count]) => {
+            const li = document.createElement('li');
+            li.textContent = `${country} — ${count}`;
+            countryList.appendChild(li);
+          });
+
+        // Top attacks
+        const attackList = document.getElementById('top-attacks');
+        attackList.innerHTML = '';
+        Object.entries(attackStats)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .forEach(([event, count]) => {
+            const li = document.createElement('li');
+            li.textContent = `${event} — ${count}`;
+            attackList.appendChild(li);
+          });
+
+        // Live Feed
+        const feed = document.getElementById('recent-events');
+        feed.innerHTML = '';
+        valid.slice(-10).reverse().forEach(e => {
+          const li = document.createElement('li');
+          li.textContent = `[${e.timestamp}] ${e.event} from ${e.ip} (${e.country})`;
+          feed.appendChild(li);
+        });
+
+      } catch (err) {
+        console.error('Error fetching traps:', err);
+      }
+    }
+
+    updateDashboard();
+    setInterval(updateDashboard, 15000);
+  </script>
+
+  <div style="position: fixed; top: 10px; right: 20px; z-index: 1100;">
+  <button onclick="downloadCSV()" style="background-color: #00ffe1; color: #000; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer;">
+    ⬇️ Download CSV
+  </button>
+</div>
+
+<script>
+  let latestData = [];
+
+  async function updateDashboard() {
+    try {
+      const res = await fetch('http://localhost:8091/api/traps');
+      const data = await res.json();
+      latestData = data; // <-- Save data for CSV download
+      const valid = data.filter(e => e.latitude !== 0 && e.longitude !== 0);
+
+      const countryStats = {};
+      const attackStats = {};
+
+      valid.forEach(e => {
+        L.circleMarker([e.latitude, e.longitude], {
+          radius: 5,
+          color: '#ff0055',
+          fillOpacity: 0.7
+        }).addTo(map).bindPopup(
+          `<strong>${e.event}</strong><br>${e.country || 'Unknown'}<br>${e.ip}`
+        );
+
+        if (e.country) countryStats[e.country] = (countryStats[e.country] || 0) + 1;
+        attackStats[e.event] = (attackStats[e.event] || 0) + 1;
+      });
+
+      const countryList = document.getElementById('top-countries');
+      countryList.innerHTML = '';
+      Object.entries(countryStats)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .forEach(([country, count]) => {
+          const li = document.createElement('li');
+          li.textContent = `${country} — ${count}`;
+          countryList.appendChild(li);
+        });
+
+      const attackList = document.getElementById('top-attacks');
+      attackList.innerHTML = '';
+      Object.entries(attackStats)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .forEach(([event, count]) => {
+          const li = document.createElement('li');
+          li.textContent = `${event} — ${count}`;
+          attackList.appendChild(li);
+        });
+
+      const feed = document.getElementById('recent-events');
+      feed.innerHTML = '';
+      valid.slice(-10).reverse().forEach(e => {
+        const li = document.createElement('li');
+        li.textContent = `[${e.timestamp}] ${e.event} from ${e.ip} (${e.country})`;
+        feed.appendChild(li);
+      });
+
+    } catch (err) {
+      console.error('Error fetching traps:', err);
+    }
+  }
+
+  function downloadCSV() {
+    if (!latestData.length) return;
+
+    const headers = ['timestamp', 'service', 'event', 'ip', 'country', 'latitude', 'longitude', 'details'];
+    const rows = latestData.map(e =>
+      headers.map(h => `"${(e[h] || '').toString().replace(/"/g, '""')}"`).join(',')
+    );
+    const csv = [headers.join(','), ...rows].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `decoydesk_logs_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  updateDashboard();
+  setInterval(updateDashboard, 15000);
+</script>
+</body>
+</html>
