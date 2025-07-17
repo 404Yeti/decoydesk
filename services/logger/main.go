@@ -33,23 +33,23 @@ var (
 )
 
 func initLogger() {
-	var err error
 	logFileName := "logs/trap-" + time.Now().Format("2006-01-02") + ".log"
 
-	if err = os.MkdirAll("logs", os.ModePerm); err != nil {
-		log.Fatalf("failed to create logs dir: %v", err)
+	if err := os.MkdirAll("logs", os.ModePerm); err != nil {
+		log.Fatalf("Failed to create logs directory: %v", err)
 	}
 
+	var err error
 	logfile, err = os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatalf("failed to open log file: %v", err)
+		log.Fatalf("Failed to open log file: %v", err)
 	}
 
 	logger = log.New(logfile, "", log.LstdFlags)
 }
 
 func LogHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*") // 👈 Enable CORS
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	var trap TrapEvent
 	if err := json.NewDecoder(r.Body).Decode(&trap); err != nil {
@@ -57,7 +57,7 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get IP address
+	// Get real IP address
 	ip := r.RemoteAddr
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
 		ip = strings.Split(forwarded, ",")[0]
@@ -66,7 +66,11 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	trap.IP = ip
 
-	// GeoIP lookup
+	// GeoIP lookup with fallback
+	trap.Country = "Unknown"
+	trap.Latitude = 0.0
+	trap.Longitude = 0.0
+
 	if parsedIP := net.ParseIP(ip); parsedIP != nil && geoDB != nil {
 		if record, err := geoDB.City(parsedIP); err == nil {
 			trap.Country = record.Country.Names["en"]
@@ -75,13 +79,13 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Store in-memory
+	// Store in memory
 	trapsMux.Lock()
 	traps = append(traps, trap)
 	trapsMux.Unlock()
 
-	// Log to file
-	logMsg := "[" + trap.Service + "]" + trap.Timestamp + " - " + trap.Event + " - " + trap.Details +
+	// Write to log file and console
+	logMsg := "[" + trap.Service + "] " + trap.Timestamp + " - " + trap.Event + " - " + trap.Details +
 		" | IP: " + trap.IP + " | Country: " + trap.Country
 	logger.Println(logMsg)
 	log.Println("[TRAP] " + logMsg)
@@ -91,7 +95,7 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func TrapsAPIHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*") // 👈 Enable CORS
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	trapsMux.Lock()
@@ -100,11 +104,21 @@ func TrapsAPIHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(traps)
 }
 
+func HealthHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
+}
+
 func main() {
+	geoPath := os.Getenv("GEOIP_DB_PATH")
+	if geoPath == "" {
+		log.Fatal("GEOIP_DB_PATH environment variable not set")
+	}
+
 	var err error
-	geoDB, err = geoip2.Open("../../data/GeoLite2-City.mmdb")
+	geoDB, err = geoip2.Open(geoPath)
 	if err != nil {
-		log.Fatalf("failed to open GeoIP database: %v", err)
+		log.Fatalf("Failed to open GeoIP database at %s: %v", geoPath, err)
 	}
 	defer geoDB.Close()
 
@@ -112,6 +126,7 @@ func main() {
 
 	http.HandleFunc("/log", LogHandler)
 	http.HandleFunc("/api/traps", TrapsAPIHandler)
+	http.HandleFunc("/health", HealthHandler)
 
 	log.Println("trap-logger svc listening on :8091")
 	log.Fatal(http.ListenAndServe(":8091", nil))

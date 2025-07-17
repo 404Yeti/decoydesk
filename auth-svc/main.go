@@ -1,23 +1,27 @@
-package main 
+package main
+
 import (
+	"bytes"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"time"
-	"bytes"
 )
 
 type LoginRequest struct {
-	Email string `json:"email"`
+	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
 type TrapEvent struct {
-	Service string `json:"service"`
-	Event string `json:"event"`
+	Service   string `json:"service"`
+	Event     string `json:"event"`
 	Timestamp string `json:"timestamp"`
-	Details string `json:"details"`
+	Details   string `json:"details"`
 }
+
+var trapLoggerURL string
 
 func sendTrapLog(event TrapEvent) {
 	payload, err := json.Marshal(event)
@@ -26,7 +30,7 @@ func sendTrapLog(event TrapEvent) {
 		return
 	}
 
-	resp, err := http.Post("http://localhost:8091/log", "application/json", bytes.NewBuffer(payload))
+	resp, err := http.Post(trapLoggerURL, "application/json", bytes.NewBuffer(payload))
 	if err != nil {
 		log.Println("Failed to send trap log:", err)
 		return
@@ -41,24 +45,31 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event := TrapEvent {
-		Service: "auth-svc",
-		Event: "Login attempt",
+	event := TrapEvent{
+		Service:   "auth-svc",
+		Event:     "Login attempt",
 		Timestamp: time.Now().Format(time.RFC3339),
-		Details: "Email: " + creds.Email + "| Password: " + creds.Password,
+		Details:   "Email: " + creds.Email + " | Password: [REDACTED]",
 	}
 
 	sendTrapLog(event)
 
-	log.Printf("Login attempt: %s | %s | Time: %s\n", creds.Email, creds.Password, time.Now())
+	log.Printf("Login attempt from %s at %s\n", creds.Email, time.Now())
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"token": "ey.fake.jwt.token",
+		"token":  "ey.fake.jwt.token",
+		"notice": "This is a honeypot. All activity is logged.",
 	})
 }
 
 func main() {
+	trapLoggerURL = os.Getenv("TRAP_LOGGER_URL")
+	if trapLoggerURL == "" {
+		trapLoggerURL = "http://localhost:8091/log"
+		log.Println("No TRAP_LOGGER_URL set. Using default:", trapLoggerURL)
+	}
+
 	http.HandleFunc("/login", loginHandler)
 	log.Println("auth-svc listening on :8060")
 	log.Fatal(http.ListenAndServe(":8060", nil))
